@@ -1,3 +1,4 @@
+from django.http import JsonResponse
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
@@ -7,6 +8,10 @@ from .serializers import CategorySerializer, ProductSerializer
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.contrib.auth.models import User
 from django.contrib.auth import authenticate
+from django.shortcuts import render
+from elasticsearch_dsl.query import MultiMatch
+from .documents import ProductDocument
+
 
 # User Signup View
 class SignUpView(APIView):
@@ -56,3 +61,23 @@ class ProductListView(APIView):
         products = Product.objects.filter(category=category)
         serializer = ProductSerializer(products, many=True)
         return Response(serializer.data)
+
+# Book Search View
+class BookSearchView(APIView):
+    def get(self, request):
+        q = request.GET.get("q")
+        if q:
+            try:
+                # Perform search on Elasticsearch using the ProductDocument
+                search_query = MultiMatch(query=q, fields=["name"], fuzziness="AUTO")
+                s = ProductDocument.search().query(search_query)
+                
+                # Get the search results as a list of dictionaries
+                results = [{"name": hit.name} for hit in s]  # Modify this as needed to include more fields
+                return Response({"products": results})  # Return the results as JSON
+
+            except Exception as e:
+                # Handle any exceptions that occur during the search
+                return Response({"error": f"Search failed: {str(e)}"}, status=500)
+        else:
+            return Response({"error": "No search query provided"}, status=400)
